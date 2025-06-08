@@ -212,16 +212,17 @@ impl PluginScanner {
         {
             let path = entry.path();
 
-            let is_vst2 = if cfg!(target_os = "macos") {
-                path.is_dir()
-                    && path
-                        .extension()
-                        .map_or(false, |ext| ext.eq_ignore_ascii_case("vst"))
-            } else if cfg!(target_os = "windows") {
-                path.is_file() && self.is_potential_vst2_file(path)
-            } else {
-                false
-            };
+            #[cfg(target_os = "macos")]
+            let is_vst2 = path.is_dir()
+                && path
+                    .extension()
+                    .map_or(false, |ext| ext.eq_ignore_ascii_case("vst"));
+
+            #[cfg(target_os = "windows")]
+            let is_vst2 = path.is_file() && self.is_potential_vst2_file(path);
+
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+            let is_vst2 = false;
 
             if is_vst2 {
                 if let Ok(plugin) = self.parse_vst2_plugin(path) {
