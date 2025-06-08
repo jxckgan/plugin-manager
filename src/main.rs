@@ -223,6 +223,10 @@ impl eframe::App for PluginCleanerApp {
 
                 if !self.selected_plugins.is_empty() {
                     ui.separator();
+                    if ui.button("Clear Selection").clicked() {
+                        self.selected_plugins.clear();
+                        self.selected_manufacturers.clear();
+                    }
                     if ui.button(format!("Move to Bin ({})", self.selected_plugins.len())).clicked() {
                         self.show_confirmation = true;
                     }

@@ -51,11 +51,6 @@ impl PluginScanner {
         Self {}
     }
 
-    pub fn delete_plugin(&self, plugin: &Plugin) -> Result<()> {
-        trash::delete(&plugin.path)
-            .with_context(|| format!("Failed to move plugin to trash: {:?}", plugin.path))
-    }
-
     pub fn scan_all_plugins(&self) -> Result<Vec<Plugin>> {
         let mut plugins = Vec::new();
 
@@ -159,21 +154,25 @@ impl PluginScanner {
 
         #[cfg(target_os = "windows")]
         {
-            // Standard AAX plugin paths for Windows
             if let Some(program_files) = std::env::var_os("ProgramW6432") {
                 paths.insert(PathBuf::from(program_files).join("Common Files/Avid/Audio/Plug-Ins"));
             }
             if let Some(program_files_x86) = std::env::var_os("ProgramFiles(x86)") {
-                paths.insert(PathBuf::from(program_files_x86).join("Common Files/Avid/Audio/Plug-Ins"));
+                paths.insert(
+                    PathBuf::from(program_files_x86).join("Common Files/Avid/Audio/Plug-Ins"),
+                );
             }
-            
-            // Fallback paths
-            paths.insert(PathBuf::from(r"C:\Program Files\Common Files\Avid\Audio\Plug-Ins"));
-            paths.insert(PathBuf::from(r"C:\Program Files (x86)\Common Files\Avid\Audio\Plug-Ins"));
-            
-            // Check registry for custom AAX paths
+
+            paths.insert(PathBuf::from(
+                r"C:\Program Files\Common Files\Avid\Audio\Plug-Ins",
+            ));
+            paths.insert(PathBuf::from(
+                r"C:\Program Files (x86)\Common Files\Avid\Audio\Plug-Ins",
+            ));
+
             if let Ok(hklm) = RegKey::predef(HKEY_LOCAL_MACHINE)
-                .open_subkey("SOFTWARE\\Avid\\Audio\\Plug-Ins") {
+                .open_subkey("SOFTWARE\\Avid\\Audio\\Plug-Ins")
+            {
                 if let Ok(aax_path) = hklm.get_value::<String, _>("InstallDir") {
                     paths.insert(PathBuf::from(aax_path));
                 }
@@ -182,11 +181,14 @@ impl PluginScanner {
 
         #[cfg(target_os = "macos")]
         {
-            // Standard AAX plugin paths for macOS
-            paths.insert(PathBuf::from("/Library/Application Support/Avid/Audio/Plug-Ins"));
-            
+            paths.insert(PathBuf::from(
+                "/Library/Application Support/Avid/Audio/Plug-Ins",
+            ));
+
             if let Some(home) = dirs::home_dir() {
-                paths.insert(home.join("Library/Application Support/Avid/Audio/Plug-Ins"));
+                paths.insert(
+                    home.join("Library/Application Support/Avid/Audio/Plug-Ins"),
+                );
             }
         }
 
@@ -320,19 +322,19 @@ impl PluginScanner {
             let path = entry.path();
 
             let is_aax = if cfg!(target_os = "macos") {
-                // macOS AAX plugins are bundles with .aaxplugin extension
-                path.is_dir() && path
-                    .extension()
-                    .map_or(false, |ext| ext.eq_ignore_ascii_case("aaxplugin"))
+                path.is_dir()
+                    && path
+                        .extension()
+                        .map_or(false, |ext| ext.eq_ignore_ascii_case("aaxplugin"))
             } else if cfg!(target_os = "windows") {
-                // Windows AAX plugins are .aaxplugin files (actually directories)
-                // or .aax files in some cases
-                (path.is_dir() && path
-                    .extension()
-                    .map_or(false, |ext| ext.eq_ignore_ascii_case("aaxplugin"))) ||
-                (path.is_file() && path
-                    .extension()
-                    .map_or(false, |ext| ext.eq_ignore_ascii_case("aax")))
+                (path.is_dir()
+                    && path
+                        .extension()
+                        .map_or(false, |ext| ext.eq_ignore_ascii_case("aaxplugin")))
+                    || (path.is_file()
+                        && path
+                            .extension()
+                            .map_or(false, |ext| ext.eq_ignore_ascii_case("aax")))
             } else {
                 false
             };
@@ -455,14 +457,6 @@ impl PluginScanner {
                         path: path.to_path_buf(),
                         plugin_type: PluginType::VST3,
                     });
-                } else {
-                    return Ok(Plugin {
-                        name: default_name,
-                        manufacturer: "Unknown".to_string(),
-                        version: None,
-                        path: path.to_path_buf(),
-                        plugin_type: PluginType::VST3,
-                    });
                 }
             }
 
@@ -509,28 +503,33 @@ impl PluginScanner {
                     }
                 }
 
-                if let Some(file_name) = path.file_name() {
-                    let contents_path = path.join("Contents");
-                    let arch_folder = if cfg!(target_arch = "x86_64") {
-                        "x86_64-win"
-                    } else {
-                        "x86-win"
-                    };
-
-                    let vst3_executable = contents_path.join(arch_folder).join(file_name);
-
-                    if vst3_executable.exists() {
-                        if let Ok((name, manufacturer, version)) =
-                            self.parse_windows_dll_metadata(&vst3_executable)
-                        {
-                            return Ok(Plugin {
-                                name: name.unwrap_or(default_name),
-                                manufacturer: manufacturer
-                                    .unwrap_or_else(|| "Unknown".to_string()),
-                                version,
-                                path: path.to_path_buf(),
-                                plugin_type: PluginType::VST3,
-                            });
+                let contents_path = path.join("Contents");
+                if contents_path.is_dir() {
+                    for entry in WalkDir::new(&contents_path)
+                        .max_depth(3)
+                        .into_iter()
+                        .filter_map(Result::ok)
+                    {
+                        let entry_path = entry.path();
+                        if entry_path.is_file() {
+                            if let Some(ext) = entry_path.extension() {
+                                if ext.eq_ignore_ascii_case("vst3")
+                                    || ext.eq_ignore_ascii_case("dll")
+                                {
+                                    if let Ok((name, manufacturer, version)) =
+                                        self.parse_windows_dll_metadata(entry_path)
+                                    {
+                                        return Ok(Plugin {
+                                            name: name.unwrap_or_else(|| default_name.clone()),
+                                            manufacturer: manufacturer
+                                                .unwrap_or_else(|| "Unknown".to_string()),
+                                            version,
+                                            path: path.to_path_buf(),
+                                            plugin_type: PluginType::VST3,
+                                        });
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -555,7 +554,6 @@ impl PluginScanner {
 
         #[cfg(target_os = "macos")]
         {
-            // Try to parse Info.plist for macOS AAX plugins
             let info_plist_path = path.join("Contents/Info.plist");
             if info_plist_path.exists() {
                 if let Ok((parsed_name, parsed_manufacturer, version)) =
@@ -575,64 +573,38 @@ impl PluginScanner {
         #[cfg(target_os = "windows")]
         {
             if path.is_dir() {
-                // Try to find the actual executable within the .aaxplugin bundle
-                if let Some(file_name) = path.file_name() {
-                    let contents_path = path.join("Contents");
-                    
-                    // Check for different architecture folders
-                    let arch_folders = if cfg!(target_arch = "x86_64") {
-                        vec!["x64", "Win64", "x86_64"]
-                    } else {
-                        vec!["Win32", "x86"]
-                    };
-
-                    for arch_folder in arch_folders {
-                        let aax_executable = contents_path.join(arch_folder).join(file_name).with_extension("aaxplugin");
-                        if aax_executable.exists() {
-                            if let Ok((name, manufacturer, version)) =
-                                self.parse_windows_dll_metadata(&aax_executable)
-                            {
-                                return Ok(Plugin {
-                                    name: name.unwrap_or_else(|| default_name.clone()),
-                                    manufacturer: manufacturer
-                                        .unwrap_or_else(|| "Unknown".to_string()),
-                                    version,
-                                    path: path.to_path_buf(),
-                                    plugin_type: PluginType::AAX,
-                                });
-                            }
-                        }
-                    }
-                }
-                
-                // Try to find any .dll or .aax file in the Contents directory
-                for entry in WalkDir::new(path.join("Contents"))
-                    .max_depth(3)
-                    .into_iter()
-                    .filter_map(Result::ok)
-                {
-                    let entry_path = entry.path();
-                    if entry_path.is_file() {
-                        if let Some(ext) = entry_path.extension() {
-                            if ext.eq_ignore_ascii_case("dll") || ext.eq_ignore_ascii_case("aax") {
-                                if let Ok((name, manufacturer, version)) =
-                                    self.parse_windows_dll_metadata(entry_path)
+                let contents_path = path.join("Contents");
+                if contents_path.is_dir() {
+                    for entry in WalkDir::new(&contents_path)
+                        .max_depth(3)
+                        .into_iter()
+                        .filter_map(Result::ok)
+                    {
+                        let entry_path = entry.path();
+                        if entry_path.is_file() {
+                            if let Some(ext) = entry_path.extension() {
+                                if ext.eq_ignore_ascii_case("aaxplugin")
+                                    || ext.eq_ignore_ascii_case("aax")
+                                    || ext.eq_ignore_ascii_case("dll")
                                 {
-                                    return Ok(Plugin {
-                                        name: name.unwrap_or_else(|| default_name.clone()),
-                                        manufacturer: manufacturer
-                                            .unwrap_or_else(|| "Unknown".to_string()),
-                                        version,
-                                        path: path.to_path_buf(),
-                                        plugin_type: PluginType::AAX,
-                                    });
+                                    if let Ok((name, manufacturer, version)) =
+                                        self.parse_windows_dll_metadata(entry_path)
+                                    {
+                                        return Ok(Plugin {
+                                            name: name.unwrap_or_else(|| default_name.clone()),
+                                            manufacturer: manufacturer
+                                                .unwrap_or_else(|| "Unknown".to_string()),
+                                            version,
+                                            path: path.to_path_buf(),
+                                            plugin_type: PluginType::AAX,
+                                        });
+                                    }
                                 }
                             }
                         }
                     }
                 }
             } else if path.is_file() {
-                // Direct .aax file
                 if let Ok((name, manufacturer, version)) = self.parse_windows_dll_metadata(path) {
                     return Ok(Plugin {
                         name: name.unwrap_or(default_name),
@@ -645,7 +617,6 @@ impl PluginScanner {
             }
         }
 
-        // Fallback for when metadata parsing fails
         Ok(Plugin {
             name: default_name,
             manufacturer: "Unknown".to_string(),
