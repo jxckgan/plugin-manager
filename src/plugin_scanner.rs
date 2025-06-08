@@ -4,6 +4,9 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 #[cfg(target_os = "macos")]
+use anyhow::Context;
+
+#[cfg(target_os = "macos")]
 use plist::Value;
 
 #[cfg(target_os = "windows")]
@@ -62,9 +65,10 @@ impl PluginScanner {
             paths.push(PathBuf::from(r"C:\Program Files\Steinberg\VstPlugins"));
             paths.push(PathBuf::from(r"C:\Program Files (x86)\Steinberg\VstPlugins"));
             if let Some(program_files) = std::env::var_os("ProgramW6432") {
-                paths.push(PathBuf::from(program_files).join("VstPlugins"));
-                paths.push(PathBuf::from(program_files).join("Steinberg/VstPlugins"));
-                paths.push(PathBuf::from(program_files).join("Common Files/VST2"));
+                let program_files_path = PathBuf::from(&program_files);
+                paths.push(program_files_path.join("VstPlugins"));
+                paths.push(program_files_path.join("Steinberg/VstPlugins"));
+                paths.push(program_files_path.join("Common Files/VST2"));
             }
         }
 
