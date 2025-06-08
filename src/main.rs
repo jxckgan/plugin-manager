@@ -30,8 +30,8 @@ struct PluginCleanerApp {
     selected_manufacturers: HashSet<String>,
     scanning: bool,
     show_confirmation: bool,
-    move_to_trash: bool,
     scanner: PluginScanner,
+    deletion_error: Option<String>,
 }
 
 impl PluginCleanerApp {
@@ -42,8 +42,8 @@ impl PluginCleanerApp {
             selected_manufacturers: HashSet::new(),
             scanning: false,
             show_confirmation: false,
-            move_to_trash: true,
             scanner: PluginScanner::new(),
+            deletion_error: None,
         }
     }
 
@@ -140,38 +140,69 @@ impl PluginCleanerApp {
             if all_selected {
                 self.selected_manufacturers.insert(plugin.manufacturer.clone());
             } else {
-                let none_selected = plugins.iter().all(|p| !self.selected_plugins.contains(&p.path));
-                if none_selected {
-                   self.selected_manufacturers.remove(&plugin.manufacturer);
-                }
+                // If not all plugins for this manufacturer are selected,
+                // it should not be in the selected_manufacturers set.
+                self.selected_manufacturers.remove(&plugin.manufacturer);
             }
         }
     }
 
-
-    fn delete_selected_plugins(&mut self) -> Result<()> {
-        if !self.selected_plugins.is_empty() {
-            if self.move_to_trash {
-                trash::delete_all(&self.selected_plugins)?;
-            } else {
-                for path in &self.selected_plugins {
-                    if path.is_file() {
-                        std::fs::remove_file(path)?;
-                    } else if path.is_dir() {
-                        std::fs::remove_dir_all(path)?;
-                    }
-                }
-            }
+    fn delete_selected_plugins(&mut self) {
+        if self.selected_plugins.is_empty() {
+            return;
         }
 
-        self.plugins.retain(|_, plugins| {
-            plugins.retain(|p| !self.selected_plugins.contains(&p.path));
-            !plugins.is_empty()
-        });
+        let paths_to_delete: Vec<_> = self.selected_plugins.iter().cloned().collect();
+        let mut actually_deleted_paths = HashSet::new();
+        let mut deletion_failed = false;
 
-        self.selected_plugins.clear();
-        self.selected_manufacturers.clear();
-        Ok(())
+        // Move to trash
+        let result = trash::delete_all(&paths_to_delete);
+        
+        // We must verify which files were actually deleted.
+        for path in &paths_to_delete {
+            if !path.exists() {
+                actually_deleted_paths.insert(path.clone());
+            }
+        }
+        
+        // A failure occurred if the operation returned an error OR if not all files were deleted.
+        if result.is_err() || actually_deleted_paths.len() < paths_to_delete.len() {
+            if let Err(e) = result {
+                 eprintln!("Error moving plugins to trash: {}", e);
+            }
+            deletion_failed = true;
+        }
+
+        if deletion_failed {
+            self.deletion_error = Some(
+                "Some or all plugins could not be moved to bin.\nThis can happen on Windows due to file permissions.\nPlease try running this application as an administrator.".to_string()
+            );
+        }
+
+        // Update application state based on what was actually deleted.
+        if !actually_deleted_paths.is_empty() {
+            // Update the set of selected plugins.
+            self.selected_plugins.retain(|p| !actually_deleted_paths.contains(p));
+            
+            // Identify which manufacturers were affected by the deletion.
+            let mut affected_manufacturers = HashSet::new();
+            self.plugins.retain(|manufacturer, plugins| {
+                let original_len = plugins.len();
+                plugins.retain(|p| !actually_deleted_paths.contains(&p.path));
+                
+                if plugins.len() < original_len {
+                    affected_manufacturers.insert(manufacturer.clone());
+                }
+                // Keep the manufacturer in the map only if it still has plugins.
+                !plugins.is_empty()
+            });
+
+            // If a manufacturer was affected, it means it's no longer fully selected.
+            for m_name in affected_manufacturers {
+                self.selected_manufacturers.remove(&m_name);
+            }
+        }
     }
 }
 
@@ -190,14 +221,9 @@ impl eframe::App for PluginCleanerApp {
                     ui.label("Scanning...");
                 }
 
-                ui.separator();
-
-                ui.radio_value(&mut self.move_to_trash, true, "Move to Bin");
-                ui.radio_value(&mut self.move_to_trash, false, "Delete Permanently");
-
                 if !self.selected_plugins.is_empty() {
-                    let action = if self.move_to_trash { "Move to Bin" } else { "Delete" };
-                    if ui.button(format!("{} Selected ({})", action, self.selected_plugins.len())).clicked() {
+                    ui.separator();
+                    if ui.button(format!("Move to Bin ({})", self.selected_plugins.len())).clicked() {
                         self.show_confirmation = true;
                     }
                 }
@@ -213,15 +239,12 @@ impl eframe::App for PluginCleanerApp {
                 for (manufacturer, plugins) in plugins_data {
                     let mut manufacturer_selected = self.selected_manufacturers.contains(&manufacturer);
                     
-                    let response = ui.horizontal(|ui| {
+                    ui.horizontal(|ui| {
                         if ui.checkbox(&mut manufacturer_selected, "").changed() {
                            self.toggle_manufacturer(&manufacturer);
                         }
                         ui.strong(format!("{} ({})", manufacturer, plugins.len()));
                     });
-
-                    if response.response.clicked() {
-                    }
 
                     ui.indent("plugins", |ui| {
                         for plugin in &plugins {
@@ -247,12 +270,12 @@ impl eframe::App for PluginCleanerApp {
         });
 
         if self.show_confirmation {
-            egui::Window::new("Confirm Deletion")
+            egui::Window::new("Confirm Move to Bin")
                 .collapsible(false)
                 .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
                 .show(ctx, |ui| {
-                    let action = if self.move_to_trash { "move to bin" } else { "permanently delete" };
-                    ui.label(format!("Are you sure you want to {} these {} plugins?", action, self.selected_plugins.len()));
+                    ui.label(format!("Are you sure you want to move these {} plugins to the bin?", self.selected_plugins.len()));
                     
                     ui.separator();
                     
@@ -273,12 +296,26 @@ impl eframe::App for PluginCleanerApp {
                             self.show_confirmation = false;
                         }
 
-                        let button_text = if self.move_to_trash { "Move to Bin" } else { "Delete" };
-                        if ui.button(button_text).clicked() {
-                            if let Err(e) = self.delete_selected_plugins() {
-                                eprintln!("Error deleting plugins: {}", e);
-                            }
+                        if ui.button("Move to Bin").clicked() {
+                            self.delete_selected_plugins();
                             self.show_confirmation = false;
+                        }
+                    });
+                });
+        }
+
+        // Show a modal error window if a deletion error occurred
+        if let Some(error_message) = self.deletion_error.clone() {
+            egui::Window::new("Move to Bin Error")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+                .show(ctx, |ui| {
+                    ui.label(error_message);
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("OK").clicked() {
+                            self.deletion_error = None;
                         }
                     });
                 });
