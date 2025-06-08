@@ -6,6 +6,7 @@ pub enum PluginType {
     VST2,
     VST3,
     AU,
+    AAX,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
