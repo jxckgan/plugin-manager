@@ -1,5 +1,5 @@
 [package]
-name = "plugin-manager"
+name = "PluginManager"
 version = "0.1.0"
 edition = "2021"
 
@@ -32,8 +32,8 @@ winapi = { version = "0.3", features = [
 embed-resource = "2.4"
 
 [package.metadata.bundle]
-name = "Plugin Cleaner"
-identifier = "com.jxckgan.plugin-cleaner"
+name = "Plugin Manager"
+identifier = "com.jxckgan.plugin-manager"
 icon = ["meta/icon.icns"]
 version = "1.0.0"
 resources = []

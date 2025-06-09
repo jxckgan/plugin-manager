@@ -3,6 +3,28 @@
 version = 4
 
 [[package]]
+name = "PluginManager"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "eframe",
+ "egui",
+ "embed-resource",
+ "image",
+ "once_cell",
+ "plist",
+ "regex",
+ "rfd",
+ "serde",
+ "serde_json",
+ "trash",
+ "walkdir",
+ "winapi",
+ "winreg 0.11.0",
+]
+
+[[package]]
 name = "ab_glyph"
 version = "0.2.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2305,28 +2327,6 @@ dependencies = [
  "quick-xml",
  "serde",
  "time",
-]
-
-[[package]]
-name = "plugin-manager"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "dirs",
- "eframe",
- "egui",
- "embed-resource",
- "image",
- "once_cell",
- "plist",
- "regex",
- "rfd",
- "serde",
- "serde_json",
- "trash",
- "walkdir",
- "winapi",
- "winreg 0.11.0",
 ]
 
 [[package]]

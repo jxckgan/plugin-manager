@@ -1,4 +1,6 @@
-1 ICON "meta/icon.ico"
+#include "resource.h"
+
+IDI_ICON1 ICON "meta/icon.ico"
 
 1 VERSIONINFO
 FILEVERSION 0,1,0,0
@@ -11,8 +13,8 @@ BEGIN
       VALUE "CompanyName", "jxckgan"
       VALUE "FileDescription", "Plugin Manager"
       VALUE "FileVersion", "1.0.0"
-      VALUE "InternalName", "plugin-manager"
-      VALUE "OriginalFilename", "plugin-manager.exe"
+      VALUE "InternalName", "Plugin Manager"
+      VALUE "OriginalFilename", "Plugin Manager.exe"
       VALUE "ProductName", "Plugin Manager"
       VALUE "ProductVersion", "1.0.0"
     END
