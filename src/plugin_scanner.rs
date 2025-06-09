@@ -2,7 +2,6 @@ use crate::plugin_types::{Plugin, PluginType};
 use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use trash;
 use walkdir::WalkDir;
 
 #[cfg(target_os = "macos")]
