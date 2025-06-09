@@ -2,4 +2,4 @@ mod gui;
 mod selection;
 mod state;
 
-pub use state::PluginCleanerApp;
+pub use state::PluginManager;

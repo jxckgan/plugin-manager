@@ -194,7 +194,7 @@ jobs:
             ### Installation Notes
             **macOS Users**: After downloading, if you get a warning about the app being from an unidentified developer, right-click (or control-click) on the app and select "Open" from the menu. Click "Open" in the dialog box that appears.
             
-            **Windows Users**: Extract the zip file and run plugin-manager.exe. Windows Defender may show a warning for unsigned executables - click "More info" then "Run anyway" if you trust the source.
+            **Windows Users**: Extract the zip file and run plugin-manager.exe **as admin**. Windows Defender may show a warning for unsigned executables - click "More info" then "Run anyway" if you trust the source.
           files: |
             artifacts/plugin-manager-mac-arm/plugin-manager-mac-arm.dmg
             artifacts/plugin-manager-win-x64/plugin-manager-win-x64.zip

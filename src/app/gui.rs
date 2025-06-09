@@ -1,11 +1,11 @@
-use super::state::PluginCleanerApp;
+use super::state::PluginManager;
 use crate::plugin::Plugin;
 use eframe::egui;
 
-impl eframe::App for PluginCleanerApp {
+impl eframe::App for PluginManager {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Audio Plugin Cleaner");
+            ui.heading("Plugin Manager");
 
             ui.horizontal(|ui| {
                 if ui.button("Scan Plugins").clicked() && !self.scanning {

@@ -3,7 +3,7 @@ use crate::scanner::PluginScanner;
 use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
-pub struct PluginCleanerApp {
+pub struct PluginManager {
     pub plugins: BTreeMap<String, Vec<Plugin>>,
     pub selected_plugins: HashSet<PathBuf>,
     pub selected_manufacturers: HashSet<String>,
@@ -13,7 +13,7 @@ pub struct PluginCleanerApp {
     pub deletion_error: Option<String>,
 }
 
-impl PluginCleanerApp {
+impl PluginManager {
     pub fn new() -> Self {
         Self {
             plugins: BTreeMap::new(),

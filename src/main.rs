@@ -7,7 +7,7 @@ mod plugin;
 mod scanner;
 mod utils;
 
-use app::PluginCleanerApp;
+use app::PluginManager;
 
 fn load_icon() -> IconData {
     let (icon_rgba, icon_width, icon_height) = {
@@ -38,6 +38,6 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
         "Plugin Manager",
         options,
-        Box::new(|_cc| Box::new(PluginCleanerApp::new())),
+        Box::new(|_cc| Box::new(PluginManager::new())),
     )
 }

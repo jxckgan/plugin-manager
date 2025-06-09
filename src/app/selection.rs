@@ -1,8 +1,8 @@
-use super::state::PluginCleanerApp;
+use super::state::PluginManager;
 use crate::plugin::Plugin;
 use std::collections::HashSet;
 
-impl PluginCleanerApp {
+impl PluginManager {
     pub fn toggle_manufacturer(&mut self, manufacturer: &str) {
         if self.selected_manufacturers.contains(manufacturer) {
             self.selected_manufacturers.remove(manufacturer);
