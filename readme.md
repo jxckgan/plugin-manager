@@ -1,8 +1,8 @@
 # plugin-manager
 
-`plugin-manager` is an application, written in Rust, for scanning (AU, AAX, VST2, VST3) audio plugins and grouping them by their vendors. It allows you to bulk delete (move to trash) or manually select plugins by vendor.
+`plugin-manager` is an application that scans (AU, AAX, VST2/3) audio plugins and groups them via their vendors. It allows you to bulk delete (via moving to the trash) or manually select plugins by said vendor.
 
-> Temporary bug: All items will be grouped properly (though always double check what you're) but sometimes the name won't be exact (e.g. Roland becomes "co")
+> Temporary bug: All items will be grouped properly (though always double check what you're selecting) but sometimes the name won't be exact (e.g. Roland becomes "co")
 
 ### To-do
 
