@@ -3,9 +3,6 @@ use crate::utils::error::Result;
 use std::path::Path;
 
 #[cfg(target_os = "windows")]
-use anyhow::Context;
-
-#[cfg(target_os = "windows")]
 use walkdir::WalkDir;
 
 #[cfg(target_os = "macos")]
