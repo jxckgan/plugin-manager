@@ -1,0 +1,204 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  check-release-flag:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check-flag.outputs.should_release }}
+    steps:
+      - name: Check for release flag
+        id: check-flag
+        run: |
+          if [[ "${{ github.event.head_commit.message }}" == *"--release"* ]]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
+  build-macos:
+    needs: check-release-flag
+    if: needs.check-release-flag.outputs.should_release == 'true'
+    runs-on: macos-14
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: aarch64-apple-darwin
+
+      - name: Build application
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Create app bundle structure
+        run: |
+          mkdir -p "Plugin Manager.app/Contents/MacOS"
+          mkdir -p "Plugin Manager.app/Contents/Resources"
+          
+          # Copy the executable
+          cp target/aarch64-apple-darwin/release/plugin-manager "Plugin Manager.app/Contents/MacOS/"
+          
+          # Copy icon if it exists
+          if [ -f "meta/icon.icns" ]; then
+            cp meta/icon.icns "Plugin Manager.app/Contents/Resources/"
+          fi
+
+      - name: Create Info.plist
+        run: |
+          cat > "Plugin Manager.app/Contents/Info.plist" << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleDisplayName</key>
+              <string>Plugin Manager</string>
+              <key>CFBundleExecutable</key>
+              <string>plugin-manager</string>
+              <key>CFBundleIconFile</key>
+              <string>icon</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.jxckgan.plugin-manager</string>
+              <key>CFBundleName</key>
+              <string>Plugin Manager</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0.0</string>
+              <key>CFBundleVersion</key>
+              <string>1.0.0</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>10.13</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Create ad-hoc signature
+        run: |
+          codesign --force --deep --sign - --options runtime "Plugin Manager.app"
+          codesign -vvv --deep --strict "Plugin Manager.app"
+
+      - name: Package for macOS (Apple Silicon)
+        run: |
+          # Create a temporary directory for DMG contents
+          mkdir -p dmg_contents
+          cp -R "Plugin Manager.app" dmg_contents/
+          ln -s /Applications dmg_contents/Applications
+          
+          # Create the DMG with the contents directory
+          hdiutil create -volname "Plugin Manager" -srcfolder dmg_contents -ov -format UDZO plugin-manager-mac-arm.dmg
+          
+          # Clean up temporary directory
+          rm -rf dmg_contents
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-manager-mac-arm
+          path: plugin-manager-mac-arm.dmg
+
+  build-windows:
+    needs: check-release-flag
+    if: needs.check-release-flag.outputs.should_release == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: x86_64-pc-windows-msvc
+
+      - name: Build application
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Package for Windows (x64)
+        run: |
+          cd target\x86_64-pc-windows-msvc\release
+          # Create zip with executable and any necessary files
+          Compress-Archive -Path plugin-manager.exe -DestinationPath ..\..\..\plugin-manager-win-x64.zip
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-manager-win-x64
+          path: plugin-manager-win-x64.zip
+
+  create-release:
+    needs: [check-release-flag, build-macos, build-windows]
+    if: needs.check-release-flag.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from commit
+        id: get-version
+        run: |
+          # Extract version from commit message (can be customized as needed)
+          VERSION=$(echo "${{ github.event.head_commit.message }}" | grep -oP '(?<=--release\s*)[^\s]+' || echo "v$(date +'%Y.%m.%d')")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Find the last release commit
+          LAST_RELEASE_COMMIT=$(git log --grep="--release" --format="%H" | sed -n 2p)
+          
+          if [ -z "$LAST_RELEASE_COMMIT" ]; then
+            # If no previous release found, use all commits
+            CHANGELOG=$(git log --pretty=format:"- %s (%h) by %an%n" ${{ github.sha }})
+          else
+            # Get commits between last release and current commit (excluding the last release commit)
+            CHANGELOG=$(git log --pretty=format:"- %s (%h) by %an%n" $LAST_RELEASE_COMMIT..${{ github.sha }} | grep -v "\-\-release")
+          fi
+          
+          CHANGELOG="${CHANGELOG//'%'/'%25'}"
+          
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get-version.outputs.version }}
+          name: Release ${{ steps.get-version.outputs.version }}
+          body: |
+            ## Plugin Manager ${{ steps.get-version.outputs.version }}
+            
+            ### Changelog
+            ${{ steps.changelog.outputs.content }}
+            
+            ### Installation Notes
+            **macOS Users**: After downloading, if you get a warning about the app being from an unidentified developer, right-click (or control-click) on the app and select "Open" from the menu. Click "Open" in the dialog box that appears.
+            
+            **Windows Users**: Extract the zip file and run plugin-manager.exe. Windows Defender may show a warning for unsigned executables - click "More info" then "Run anyway" if you trust the source.
+          files: |
+            artifacts/plugin-manager-mac-arm/plugin-manager-mac-arm.dmg
+            artifacts/plugin-manager-win-x64/plugin-manager-win-x64.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
