@@ -1,13 +1,17 @@
 use crate::plugin::{Plugin, PluginType};
 use crate::utils::error::Result;
-use anyhow::Context;
 use std::path::Path;
+
+#[cfg(target_os = "windows")]
+use anyhow::Context;
 
 #[cfg(target_os = "windows")]
 use walkdir::WalkDir;
 
 #[cfg(target_os = "macos")]
 use plist::Value;
+#[cfg(target_os = "macos")]
+use anyhow::Context;
 
 #[cfg(target_os = "windows")]
 use std::ffi::OsStr;

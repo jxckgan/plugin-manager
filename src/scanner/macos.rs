@@ -4,6 +4,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
+// Only import parse_au_plugin on macOS
+#[cfg(target_os = "macos")]
 use super::metadata::parse_au_plugin;
 
 pub(super) fn get_vst2_paths() -> Vec<PathBuf> {
@@ -43,6 +45,7 @@ pub(super) fn get_au_paths() -> Vec<PathBuf> {
     paths
 }
 
+#[cfg(target_os = "macos")]
 pub(super) fn scan_au_directory(dir: &Path) -> Result<Vec<Plugin>> {
     let mut plugins = Vec::new();
     for entry in WalkDir::new(dir)
